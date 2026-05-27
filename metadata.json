@@ -1,0 +1,6 @@
+{
+  "name": "Belajar Nihongo",
+  "description": "Aplikasi belajar Hiragana & Katakana lengkap dengan Tenten (Dakuten), Maru, dan Yōon. Dilengkapi kuis interaktif, pelacak level keberhasilan, serta hafalan kosakata (Kotoba) Minna no Nihongo 1 & LPK Habiki.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
