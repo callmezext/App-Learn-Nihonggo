@@ -99,7 +99,7 @@ private val SamuraiDarkColors = darkColorScheme(
 
 @Composable
 fun MyApplicationTheme(
-    appTheme: AppTheme = AppTheme.CLASSIC_INDIGO,
+    appTheme: AppTheme = AppTheme.SAMURAI_DARK,
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {

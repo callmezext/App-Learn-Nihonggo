@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 sealed class Screen {
+    object Cover : Screen()
     object Dashboard : Screen()
     object KanaChart : Screen()
     data class Quiz(val levelIndex: Int) : Screen()
@@ -24,7 +25,11 @@ data class QuizQuestion(
     val correctRomaji: String,
     val options: List<String>,
     val isTypeInQuiz: Boolean = false,
-    val kanaType: String
+    val kanaType: String,
+    val isRomajiToKana: Boolean = false,
+    val displayPrompt: String = "",
+    val originChar: String = "",
+    val originRomaji: String = ""
 )
 
 data class ActiveQuiz(
@@ -52,7 +57,8 @@ data class ActiveVocabQuiz(
     val correctAnswers: Int = 0,
     val selectedAnswer: String? = null,
     val isAnswered: Boolean = false,
-    val isFinished: Boolean = false
+    val isFinished: Boolean = false,
+    val quizTier: Int? = null
 )
 
 enum class AppTheme(val displayName: String) {
@@ -70,9 +76,9 @@ class NihongoViewModel(application: Application) : AndroidViewModel(application)
     // Persistent Theme selection
     private val _currentTheme = MutableStateFlow(
         try {
-            AppTheme.valueOf(prefs.getString("app_theme", AppTheme.CLASSIC_INDIGO.name) ?: AppTheme.CLASSIC_INDIGO.name)
+            AppTheme.valueOf(prefs.getString("app_theme", AppTheme.SAMURAI_DARK.name) ?: AppTheme.SAMURAI_DARK.name)
         } catch (e: Exception) {
-            AppTheme.CLASSIC_INDIGO
+            AppTheme.SAMURAI_DARK
         }
     )
     val currentTheme: StateFlow<AppTheme> = _currentTheme.asStateFlow()
@@ -83,7 +89,7 @@ class NihongoViewModel(application: Application) : AndroidViewModel(application)
     }
 
     // Current navigating screen
-    private val _currentScreen = MutableStateFlow<Screen>(Screen.Dashboard)
+    private val _currentScreen = MutableStateFlow<Screen>(Screen.Cover)
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
 
     // Database Flows
@@ -149,45 +155,115 @@ class NihongoViewModel(application: Application) : AndroidViewModel(application)
             val levelTitle = levelItem?.title ?: "Kuis Level $levelIndex"
 
             // Filter kana for this level
-            // If level 15 (Grand exam), take from all levels
-            val levelKana = if (levelIndex == 15) {
-                allKanaList.shuffled().take(15)
-            } else {
-                allKanaList.filter { it.level == levelIndex }
+            // levels 3, 5, 7, 9 are cumulative review levels; level 19 is the ultimate exam
+            val levelKana = when (levelIndex) {
+                19 -> allKanaList.shuffled().take(15)
+                3 -> allKanaList.filter { it.level == 1 || it.level == 2 }.shuffled().take(10)
+                5 -> allKanaList.filter { it.level == 1 || it.level == 2 || it.level == 4 }.shuffled().take(10)
+                7 -> allKanaList.filter { it.level == 1 || it.level == 2 || it.level == 4 || it.level == 6 }.shuffled().take(10)
+                9 -> allKanaList.filter { it.level == 1 || it.level == 2 || it.level == 4 || it.level == 6 || it.level == 8 }.shuffled().take(10)
+                else -> allKanaList.filter { it.level == levelIndex }
             }
 
             if (levelKana.isEmpty()) return@launch
 
             // Generate questions
-            // Let's create 10 questions (or amount of available kana if < 10)
             val questionPool = mutableListOf<QuizQuestion>()
-            val maxQuestions = if (levelIndex == 15) 15 else 10
+            val maxQuestions = if (levelIndex == 19) 15 else 10
             
             for (i in 0 until maxQuestions) {
                 val baseKana = levelKana[i % levelKana.size]
-                // 30% chance for keyboard type-in romaji test, 70% multiple choice
-                val isTypeIn = i % 3 == 0 && levelIndex != 15 // Avoid typing in combined finals unless desired, making it friendly but challenging
+                // Always multiple choice, no keyboard type-in romaji test
+                val isTypeIn = false
+                val isRomajiToKana = (i % 2 == 1)
 
-                // Options with distractors
-                val correctRomaji = baseKana.romaji
-                val distractors = allKanaList
-                    .filter { it.romaji != correctRomaji }
-                    .map { it.romaji }
-                    .distinct()
-                    .shuffled()
-                    .take(3)
+                if (!isRomajiToKana) {
+                    // 1. KANA -> ROMAJI (tanya romaji dari huruf jepang)
+                    val correctRomaji = baseKana.romaji
+                    
+                    // Prioritize other characters from the exact same level being tested
+                    val localDistractors = levelKana
+                        .filter { it.romaji != correctRomaji }
+                        .map { it.romaji }
+                        .distinct()
+                        .shuffled()
 
-                val options = (distractors + correctRomaji).shuffled()
+                    val distractors = if (localDistractors.size >= 3) {
+                        localDistractors.take(3)
+                    } else {
+                        // Filter candidates: same hiragana/katakana type and level <= current index to keep choices level-appropriate!
+                        val allowedDistractorKana = allKanaList.filter { 
+                            it.kanaType == baseKana.kanaType && 
+                            it.romaji != correctRomaji && 
+                            it.level <= levelIndex 
+                        }
+                        val genericDistractors = allowedDistractorKana
+                            .map { it.romaji }
+                            .distinct()
+                            .shuffled()
+                            
+                        (localDistractors + genericDistractors).distinct().take(3)
+                    }
 
-                questionPool.add(
-                    QuizQuestion(
-                        character = baseKana.char,
-                        correctRomaji = correctRomaji,
-                        options = options,
-                        isTypeInQuiz = isTypeIn,
-                        kanaType = baseKana.kanaType
+                    val options = (distractors + correctRomaji).distinct().shuffled()
+
+                    questionPool.add(
+                        QuizQuestion(
+                            character = baseKana.char,
+                            correctRomaji = correctRomaji,
+                            options = options,
+                            isTypeInQuiz = isTypeIn,
+                            kanaType = baseKana.kanaType,
+                            isRomajiToKana = false,
+                            displayPrompt = "Apa Romaji dari huruf ${baseKana.kanaType} di atas?",
+                            originChar = baseKana.char,
+                            originRomaji = baseKana.romaji
+                        )
                     )
-                )
+                } else {
+                    // 2. ROMAJI -> KANA (tanya huruf jepang untuk romaji tersebut)
+                    val correctChar = baseKana.char
+                    val correctRomaji = baseKana.romaji
+
+                    val localDistractors = levelKana
+                        .filter { it.char != correctChar }
+                        .map { it.char }
+                        .distinct()
+                        .shuffled()
+
+                    val distractors = if (localDistractors.size >= 3) {
+                        localDistractors.take(3)
+                    } else {
+                        // Filter candidates: same hiragana/katakana type and level <= current index
+                        val allowedDistractorKana = allKanaList.filter { 
+                            it.kanaType == baseKana.kanaType && 
+                            it.char != correctChar && 
+                            it.level <= levelIndex 
+                        }
+                        val genericDistractors = allowedDistractorKana
+                            .map { it.char }
+                            .distinct()
+                            .shuffled()
+                            
+                        (localDistractors + genericDistractors).distinct().take(3)
+                    }
+
+                    val options = (distractors + correctChar).distinct().shuffled()
+
+                    questionPool.add(
+                        QuizQuestion(
+                            character = correctRomaji, // Tunjukkan Romaji sebagai soal utama (e.g. "ka")
+                            correctRomaji = correctChar, // User harus klik tombol dengan tulisan Hiragana/Katakana yang tepat
+                            options = options,
+                            isTypeInQuiz = isTypeIn,
+                            kanaType = baseKana.kanaType,
+                            isRomajiToKana = true,
+                            displayPrompt = "Mana huruf ${baseKana.kanaType} untuk Romaji di atas?",
+                            originChar = baseKana.char,
+                            originRomaji = baseKana.romaji
+                        )
+                    )
+                }
             }
 
             _activeQuiz.value = ActiveQuiz(
@@ -207,17 +283,26 @@ class NihongoViewModel(application: Application) : AndroidViewModel(application)
         val isCorrect = selected.trim().lowercase() == currentQuestion.correctRomaji.lowercase()
 
         viewModelScope.launch {
-            // Save correct/wrong to DB to update individual character masteries
-            repository.recordTestResult(currentQuestion.character, isCorrect)
+            // Save correct/wrong to DB to update individual character masteries using originChar
+            repository.recordTestResult(currentQuestion.originChar, isCorrect)
         }
 
         val updatedCorrect = if (isCorrect) quiz.correctAnswers + 1 else quiz.correctAnswers
 
-        _activeQuiz.value = quiz.copy(
-            selectedAnswer = selected,
-            isAnswered = true,
-            correctAnswers = updatedCorrect
-        )
+        if (isCorrect) {
+            _activeQuiz.value = quiz.copy(
+                selectedAnswer = selected,
+                isAnswered = true,
+                correctAnswers = updatedCorrect
+            )
+            nextKanaQuestion()
+        } else {
+            _activeQuiz.value = quiz.copy(
+                selectedAnswer = selected,
+                isAnswered = true,
+                correctAnswers = updatedCorrect
+            )
+        }
     }
 
     fun updateTypedInput(input: String) {
@@ -306,6 +391,60 @@ class NihongoViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
+    fun startGradedVocabQuiz(book: String, quizTier: Int) {
+        val fullList = if (book == "MINNA") minnaVocab.value else habikiVocab.value
+        
+        // Match specific sections/lessons for each Tier (1 = easiest, 10 = hardest)
+        val targetLessons = when (quizTier) {
+            1 -> listOf(1)
+            2 -> listOf(1, 2)
+            3 -> listOf(1, 2, 3)
+            4 -> listOf(4)
+            5 -> listOf(1, 2, 3, 4)
+            6 -> listOf(5)
+            7 -> listOf(6)
+            8 -> listOf(7)
+            9 -> listOf(8)
+            10 -> listOf(9, 10)
+            else -> listOf(1)
+        }
+
+        val list = fullList.filter { it.lesson in targetLessons }
+        val finalSelection = if (list.size < 4) fullList else list
+
+        val questions = finalSelection.shuffled().take(10).mapIndexed { index, vocab ->
+            val qType = index % 2
+            val distractors = if (qType == 0) {
+                fullList.filter { it.meaning != vocab.meaning }
+                    .map { it.meaning }
+                    .distinct()
+                    .shuffled()
+                    .take(3)
+            } else {
+                fullList.filter { it.jpn != vocab.jpn }
+                    .map { it.jpn }
+                    .distinct()
+                    .shuffled()
+                    .take(3)
+            }
+
+            val correct = if (qType == 0) vocab.meaning else vocab.jpn
+            val options = (distractors + correct).shuffled()
+
+            VocabQuestion(
+                vocabulary = vocab,
+                questionType = qType,
+                options = options
+            )
+        }
+
+        _activeVocabQuiz.value = ActiveVocabQuiz(
+            book = book,
+            questions = questions,
+            quizTier = quizTier
+        )
+    }
+
     fun answerVocabQuiz(selected: String) {
         val quiz = _activeVocabQuiz.value ?: return
         if (quiz.isAnswered) return
@@ -323,11 +462,20 @@ class NihongoViewModel(application: Application) : AndroidViewModel(application)
 
         val updatedCorrect = if (isCorrect) quiz.correctAnswers + 1 else quiz.correctAnswers
 
-        _activeVocabQuiz.value = quiz.copy(
-            selectedAnswer = selected,
-            isAnswered = true,
-            correctAnswers = updatedCorrect
-        )
+        if (isCorrect) {
+            _activeVocabQuiz.value = quiz.copy(
+                selectedAnswer = selected,
+                isAnswered = true,
+                correctAnswers = updatedCorrect
+            )
+            nextVocabQuestion()
+        } else {
+            _activeVocabQuiz.value = quiz.copy(
+                selectedAnswer = selected,
+                isAnswered = true,
+                correctAnswers = updatedCorrect
+            )
+        }
     }
 
     fun nextVocabQuestion() {

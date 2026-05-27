@@ -22,6 +22,7 @@ import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.KanaChartScreen
 import com.example.ui.screens.KotobaScreen
 import com.example.ui.screens.QuizScreen
+import com.example.ui.screens.CoverScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.NihongoViewModel
 import com.example.ui.viewmodel.Screen
@@ -50,8 +51,8 @@ fun MainContent(viewModel: NihongoViewModel) {
     val habikiVocab by viewModel.habikiVocab.collectAsState()
     val activeQuiz by viewModel.activeQuiz.collectAsState()
 
-    // Hide bottom navigation bar during active quiz to maximize content focus
-    val showBottomBar = activeQuiz == null
+    // Hide bottom navigation bar during active quiz or cover screen to maximize content focus
+    val showBottomBar = activeQuiz == null && currentScreen !is Screen.Cover
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -98,6 +99,9 @@ fun MainContent(viewModel: NihongoViewModel) {
                 .padding(innerPadding)
         ) {
             when (val screen = currentScreen) {
+                is Screen.Cover -> {
+                    CoverScreen(viewModel = viewModel)
+                }
                 is Screen.Dashboard -> {
                     DashboardScreen(
                         viewModel = viewModel,

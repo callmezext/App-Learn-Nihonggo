@@ -114,7 +114,7 @@ fun QuizScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "Apa Romaji dari huruf ${currentQuestion.kanaType} di atas?",
+                                text = currentQuestion.displayPrompt.ifEmpty { "Apa Romaji dari huruf ${currentQuestion.kanaType} di atas?" },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
                                 textAlign = TextAlign.Center,
@@ -142,6 +142,57 @@ fun QuizScreen(
                         correctAnswer = currentQuestion.correctRomaji,
                         onOptionSelected = { viewModel.answerKanaQuiz(it) }
                     )
+                }
+
+                // Beautiful alert notification feedback if answer is wrong
+                val isWrongAnswer = quizState.isAnswered && quizState.selectedAnswer?.trim()?.lowercase() != currentQuestion.correctRomaji.lowercase()
+                AnimatedVisibility(visible = isWrongAnswer) {
+                    val isDark = MaterialTheme.colorScheme.background.red < 0.25f
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isDark) Color(0xFF7F1D1D).copy(alpha = 0.4f) else Color(0xFFFFEBEE)
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        border = CardDefaults.outlinedCardBorder().copy(
+                            brush = androidx.compose.ui.graphics.SolidColor(if (isDark) Color(0xFFEF4444) else Color(0xFFF44336))
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Cancel,
+                                contentDescription = "Salah",
+                                tint = if (isDark) Color(0xFFF87171) else Color(0xFFF44336),
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Jawaban Kurang Tepat! ❌",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isDark) Color(0xFFFCA5A5) else Color(0xFFC62828)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Kamu memilih: '${quizState.selectedAnswer ?: ""}'",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isDark) Color.White.copy(alpha = 0.8f) else Color.DarkGray
+                                )
+                                Text(
+                                    text = "Jawaban yang benar: '${currentQuestion.correctRomaji}'",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = if (isDark) Color(0xFF86EFAC) else Color(0xFF2E7D32)
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -180,31 +231,32 @@ fun MultipleChoiceBlock(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         options.forEach { option ->
             val isSelected = option == selectedOption
             val isCorrect = option == correctAnswer
+            val isDark = MaterialTheme.colorScheme.background.red < 0.25f
 
             val cardColor = when {
                 !isAnswered -> MaterialTheme.colorScheme.surface
-                isCorrect -> Color(0xFFE8F5E9) // soft green for correct
-                isSelected -> Color(0xFFFFEBEE) // soft red for your selected wrong answer
-                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                isCorrect -> if (isDark) Color(0xFF1B5E20) else Color(0xFFE8F5E9)
+                isSelected -> if (isDark) Color(0xFF7F1D1D) else Color(0xFFFFEBEE)
+                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
             }
 
             val borderColor = when {
-                !isAnswered -> if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
-                isCorrect -> Color(0xFF4CAF50)
-                isSelected -> Color(0xFFF44336)
+                !isAnswered -> if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                isCorrect -> if (isDark) Color(0xFF81C784) else Color(0xFF4CAF50)
+                isSelected -> if (isDark) Color(0xFFE57373) else Color(0xFFF44336)
                 else -> Color.Transparent
             }
 
             val textColor = when {
                 !isAnswered -> MaterialTheme.colorScheme.onSurface
-                isCorrect -> Color(0xFF2E7D32)
-                isSelected -> Color(0xFFC62828)
-                else -> MaterialTheme.colorScheme.outline
+                isCorrect -> if (isDark) Color.White else Color(0xFF2E7D32)
+                isSelected -> if (isDark) Color.White else Color(0xFFC62828)
+                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             }
 
             Card(
@@ -214,19 +266,23 @@ fun MultipleChoiceBlock(
                     .clickable(enabled = !isAnswered) { onOptionSelected(option) },
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = cardColor),
-                border = if (borderColor != Color.Transparent) CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(borderColor)) else null
+                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(borderColor))
             ) {
-                Row(
+                Box(
                     modifier = Modifier
-                        .padding(18.dp)
+                        .padding(horizontal = 24.dp, vertical = 18.dp)
                         .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = option,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                        color = textColor
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp,
+                            letterSpacing = 0.5.sp
+                        ),
+                        color = textColor,
+                        textAlign = TextAlign.Center
                     )
 
                     if (isAnswered) {
@@ -234,13 +290,15 @@ fun MultipleChoiceBlock(
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
                                 contentDescription = "Benar",
-                                tint = Color(0xFF4CAF50)
+                                tint = if (isDark) Color(0xFF81C784) else Color(0xFF4CAF50),
+                                modifier = Modifier.align(Alignment.CenterEnd)
                             )
                         } else if (isSelected) {
                             Icon(
                                 imageVector = Icons.Default.Cancel,
                                 contentDescription = "Salah",
-                                tint = Color(0xFFF44336)
+                                tint = if (isDark) Color(0xFFE57373) else Color(0xFFF44336),
+                                modifier = Modifier.align(Alignment.CenterEnd)
                             )
                         }
                     }

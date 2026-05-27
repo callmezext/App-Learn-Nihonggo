@@ -44,6 +44,9 @@ interface VocabularyDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(vocabList: List<Vocabulary>)
 
+    @Query("DELETE FROM vocabulary")
+    suspend fun deleteAll()
+
     @Query("UPDATE vocabulary SET isMastered = :isMastered WHERE id = :id")
     suspend fun updateVocabMastery(id: Int, isMastered: Boolean)
 }
@@ -66,7 +69,7 @@ interface LevelStatusDao {
     suspend fun updateHighScore(levelIndex: Int, score: Int)
 }
 
-@Database(entities = [KanaMastery::class, Vocabulary::class, LevelStatus::class], version = 1, exportSchema = false)
+@Database(entities = [KanaMastery::class, Vocabulary::class, LevelStatus::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun kanaDao(): KanaDao
     abstract fun vocabularyDao(): VocabularyDao

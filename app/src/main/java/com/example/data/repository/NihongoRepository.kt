@@ -30,9 +30,10 @@ class NihongoRepository(private val database: AppDatabase) {
                 kanaDao.insertAll(InitialData.initialKana)
                 Log.d("NihongoRepository", "Kana prepopulated.")
             }
-            if (vocabularyDao.getCount() == 0) {
+            if (vocabularyDao.getCount() < 50) {
+                vocabularyDao.deleteAll()
                 vocabularyDao.insertAll(InitialData.initialVocabulary)
-                Log.d("NihongoRepository", "Vocabulary prepopulated.")
+                Log.d("NihongoRepository", "Vocabulary prepopulated and expanded.")
             }
         } catch (e: Exception) {
             Log.e("NihongoRepository", "Error during prepopulation", e)
@@ -56,8 +57,8 @@ class NihongoRepository(private val database: AppDatabase) {
         // Save matching high score
         levelStatusDao.updateHighScore(levelIndex, scorePercentage)
 
-        // If high score is >= 60%, unlock the next level (if within bounds 1..14)
-        if (scorePercentage >= 60 && levelIndex < 15) {
+        // If high score is >= 60%, unlock the next level (if within bounds 1..18)
+        if (scorePercentage >= 60 && levelIndex < 19) {
             levelStatusDao.unlockLevel(levelIndex + 1)
         }
     }
